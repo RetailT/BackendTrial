@@ -1,25 +1,28 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import cors from "cors";
+import serverless from "serverless-http";
+
 const app = express();
 
-const { connectToDatabase } = require("../config/db");
-const { authenticateToken } = require("../middleware/authMiddleware");
+// Import your controllers and middleware here
 const authController = require("../controllers/authController");
 
-app.use(cors({
-  origin: "https://retailtarget.lk", // Allow only this domain
-  credentials: true // If you're sending cookies or auth headers
-}));
-
+app.use(
+  cors({
+    origin: "https://retailtarget.lk",
+    credentials: true,
+  })
+);
 app.use(express.json());
 
-app.get("/", (req, res) => res.send("Hello Vercel"));
+// Define routes
+app.get("/", (req: Request, res: Response) => {
+  res.send("Hello Vercel");
+});
+
 app.get("/time", authController.getServerTime);
+app.post("/login", authController.login);
 
-app.post('/login', authController.login);
-
-// app.listen(3000, () => console.log("Server ready on port 3000."));
-
-// module.exports = app;
-
-export default app;
+// Export as serverless function
+module.exports = app;
+module.exports.handler = serverless(app);

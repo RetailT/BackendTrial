@@ -10,7 +10,9 @@ const dbConfig = {
     encrypt: false,
     trustServerCertificate: true,
   },
-  port: 1443, // Corrected to the default MSSQL port
+  port: 1443, 
+  connectionTimeout: 5000,  // << timeout in ms
+  requestTimeout: 5000
 };
 
 let pool = null;

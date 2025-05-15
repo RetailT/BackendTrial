@@ -89,6 +89,8 @@ exports.login = async (req, res) => {
         trustServerCertificate: true,
       },
       port: parseInt(port),
+      connectionTimeout: 5000,  // << timeout in ms
+      requestTimeout: 5000
     };
 
     const dynamicPool = await mssql.connect(dynamicDbConfig);
