@@ -188,7 +188,7 @@ exports.register = async (req, res) => {
         VALUES (@username, @email, @password)
       `);
 
-    return res.status(201).json({ message: "User registered successfully" });
+    return res.status(201).json({ message: "User added successfully" });
   } catch (err) {
     console.error("Registration error:", err);
     if (!res.headersSent) {
