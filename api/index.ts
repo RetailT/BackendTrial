@@ -2,6 +2,8 @@ import express from "express";
 const app = express();
 
 const { connectToDatabase } = require("../config/db");
+const { authenticateToken } = require("../middleware/authMiddleware");
+const authController = require("../controllers/authController");
 
 app.get("/", async (req, res) => {
   try {
@@ -15,6 +17,7 @@ app.get("/", async (req, res) => {
 });
 
 app.get("/hello", (req, res) => res.send("Hello Vercel"));
+app.get("/time", authController.getServerTime);
 
 // app.listen(3000, () => console.log("Server ready on port 3000."));
 
