@@ -10,24 +10,33 @@ const dbConfig = {
     encrypt: false,
     trustServerCertificate: true,
   },
-  port: 1443, 
-  connectionTimeout: 5000,  // << timeout in ms
-  requestTimeout: 5000
+  port: 1443,
+  connectionTimeout: 5000,
+  requestTimeout: 5000,
 };
 
-let pool = null;
+// Global for reuse across serverless invocations
+let cachedPool = null;
 
 const connectToDatabase = async () => {
-  if (pool) {
-    return pool; // reuse pool in serverless
+  if (cachedPool) {
+    try {
+      // Ping the DB to ensure it's still alive
+      await cachedPool.request().query('SELECT 1');
+      return cachedPool;
+    } catch (pingError) {
+      console.warn('Stale MSSQL pool found. Reconnecting...');
+      cachedPool = null;
+    }
   }
 
   try {
-    pool = await mssql.connect(dbConfig);
-    console.log('Connected to MSSQL database');
+    const pool = await mssql.connect(dbConfig);
+    console.log('✅ Connected to MSSQL database');
+    cachedPool = pool;
     return pool;
   } catch (err) {
-    console.error('Database connection failed:', err);
+    console.error('❌ Failed to connect to MSSQL:', err);
     throw err;
   }
 };
