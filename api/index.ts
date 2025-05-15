@@ -21,7 +21,10 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 app.get("/time", authController.getServerTime);
+
+
 app.post("/login", authController.login);
+app.post('/register', authController.register);
 
 // Export as serverless function
 module.exports = app;

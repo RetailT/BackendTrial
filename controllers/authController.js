@@ -22,6 +22,7 @@ exports.getServerTime = async (req, res) => {
   }
 };
 
+//login
 exports.login = async (req, res) => {
   let pool;
   try {
@@ -138,6 +139,62 @@ exports.login = async (req, res) => {
     }
   } finally {
     // Ensure connection is closed in case of error
+    if (mssql.connected) await mssql.close();
+  }
+};
+
+//register
+exports.register = async (req, res) => {
+  let pool;
+  try {
+    pool = await connectToDatabase();
+
+    const { username, email, password } = req.body;
+    if (!username || !email || !password) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    // Check for existing user
+    const checkUserResult = await pool
+      .request()
+      .input("username", mssql.VarChar, username)
+      .input("email", mssql.VarChar, email)
+      .query(`
+        USE [RTPOS_MAIN];
+        SELECT * FROM tb_USERS WHERE username = @username OR email = @email
+      `);
+
+    if (checkUserResult.recordset.length > 0) {
+      const existingUser = checkUserResult.recordset[0];
+      if (existingUser.username === username) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+      if (existingUser.email === email) {
+        return res.status(400).json({ message: "Email already exists" });
+      }
+    }
+
+    // Hash password and insert new user
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await pool
+      .request()
+      .input("username", mssql.VarChar, username)
+      .input("email", mssql.VarChar, email)
+      .input("password", mssql.VarChar, hashedPassword)
+      .query(`
+        USE [RTPOS_MAIN];
+        INSERT INTO tb_USERS (username, email, password)
+        VALUES (@username, @email, @password)
+      `);
+
+    return res.status(201).json({ message: "User registered successfully" });
+  } catch (err) {
+    console.error("Registration error:", err);
+    if (!res.headersSent) {
+      return res.status(500).json({ message: "Failed to register user" });
+    }
+  } finally {
     if (mssql.connected) await mssql.close();
   }
 };
