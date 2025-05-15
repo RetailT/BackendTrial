@@ -1,9 +1,15 @@
 import express from "express";
+import cors from "cors";
 const app = express();
 
 const { connectToDatabase } = require("../config/db");
 const { authenticateToken } = require("../middleware/authMiddleware");
 const authController = require("../controllers/authController");
+
+app.use(cors({
+  origin: "https://retailtarget.lk", // Allow only this domain
+  credentials: true // If you're sending cookies or auth headers
+}));
 
 app.use(express.json());
 
