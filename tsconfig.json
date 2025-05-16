@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
-    "typeRoots": ["./node_modules/@types", "./types"]
+    "typeRoots": ["./node_modules/@types", "./types"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true, // optional, but helps with compatibility
+    "module": "CommonJS",
   }
 }

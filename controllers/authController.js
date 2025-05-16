@@ -3,6 +3,9 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const moment = require("moment");
 const mssql = require("mssql");
+const crypto = require('crypto');
+const nodemailer = require("nodemailer");
+const { sendPasswordResetEmail } = require("../utils/nodemailer");
 
 exports.getServerTime = async (req, res) => {
   try {
@@ -193,6 +196,121 @@ exports.register = async (req, res) => {
     console.error("Registration error:", err);
     if (!res.headersSent) {
       return res.status(500).json({ message: "Failed to register user" });
+    }
+  } finally {
+    if (mssql.connected) await mssql.close();
+  }
+};
+
+//reset password
+exports.resetPassword = async (req, res) => {
+  let pool;
+
+  const { token, newPassword } = req.body;
+
+  if (!token || !newPassword) {
+    return res.status(400).json({ message: "Token and new password are required" });
+  }
+
+  try {
+    pool = await connectToDatabase();
+
+    // Find user by reset token
+    const result = await pool
+      .request()
+      .input("token", mssql.VarChar, token)
+      .query(`
+        USE [RTPOS_MAIN];
+        SELECT * FROM tb_USERS WHERE resetToken = @token
+      `);
+
+    if (result.recordset.length === 0) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    const user = result.recordset[0];
+
+    if (Date.now() > user.resetTokenExpiry) {
+      return res.status(400).json({ message: "Reset token has expired" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password and clear reset token fields
+    await pool
+      .request()
+      .input("hashedPassword", mssql.VarChar, hashedPassword)
+      .input("token", mssql.VarChar, token)
+      .query(`
+        USE [RTPOS_MAIN];
+        UPDATE tb_USERS
+        SET password = @hashedPassword, resetToken = NULL, resetTokenExpiry = NULL
+        WHERE resetToken = @token
+      `);
+
+    return res.status(200).json({ message: "Password has been reset successfully" });
+
+  } catch (error) {
+    console.error("Error resetting password:", error);
+    if (!res.headersSent) {
+      return res.status(500).json({ message: "Failed to reset password" });
+    }
+  } finally {
+    if (mssql.connected) await mssql.close();
+  }
+};
+
+//forgot password
+exports.forgotPassword = async (req, res) => {
+  let pool;
+  const { username } = req.body;
+
+  if (!username) {
+    return res.status(400).json({ message: "Username is required" });
+  }
+
+  try {
+    pool = await connectToDatabase();
+
+    // Check if user exists
+    const result = await pool
+      .request()
+      .input("username", mssql.VarChar, username)
+      .query(`
+        USE [RTPOS_MAIN];
+        SELECT * FROM tb_USERS WHERE username = @username
+      `);
+
+    if (result.recordset.length === 0) {
+      return res.status(400).json({ message: "No user found with this username" });
+    }
+
+    const user = result.recordset[0];
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenExpiry = Date.now() + 3600000; // 1 hour expiry
+
+    // Update user with reset token and expiry
+    await pool
+      .request()
+      .input("resetToken", mssql.VarChar, resetToken)
+      .input("resetTokenExpiry", mssql.BigInt, resetTokenExpiry)
+      .input("username", mssql.VarChar, username)
+      .query(`
+        USE [RTPOS_MAIN];
+        UPDATE tb_USERS
+        SET resetToken = @resetToken, resetTokenExpiry = @resetTokenExpiry
+        WHERE username = @username
+      `);
+
+    // Send email with token
+    await sendPasswordResetEmail(user.email, resetToken);
+
+    return res.status(200).json({ message: "Password reset email sent" });
+
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    if (!res.headersSent) {
+      return res.status(500).json({ message: "Failed to send password reset email" });
     }
   } finally {
     if (mssql.connected) await mssql.close();

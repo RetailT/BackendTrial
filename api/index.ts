@@ -25,6 +25,8 @@ app.get("/time", authController.getServerTime);
 
 app.post("/login", authController.login);
 app.post('/register', authController.register);
+app.post('/reset-password', authController.resetPassword);
+app.post('/forgot-password', authController.forgotPassword);
 
 // Export as serverless function
 module.exports = app;
