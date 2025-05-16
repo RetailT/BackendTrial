@@ -23,6 +23,20 @@ app.get("/", (req: Request, res: Response) => {
 
 app.get('/companies', authenticateToken, authController.dashboardOptions);
 app.get('/vendors', authenticateToken, authController.vendorOptions);
+app.get('/report-data', authenticateToken, authController.reportData);
+app.get('/current-report-data', authenticateToken, authController.currentReportData);
+app.get('/dashboard-data', authenticateToken, authController.loadingDashboard);
+app.get('/department-data', authenticateToken, authController.departmentDashboard);
+app.get('/category-data', authenticateToken, authController.categoryDashboard);
+app.get('/sub-category-data', authenticateToken, authController.subCategoryDashboard);
+app.get('/vendor-data', authenticateToken, authController.vendorDashboard);
+app.get('/scan', authenticateToken, authController.scan);
+app.get('/stock-update', authenticateToken, authController.stockUpdate);
+app.get('/grnprn-table-data', authenticateToken, authController.grnprnTableData);
+app.get('/final-stock-update', authenticateToken, authController.finalStockUpdate);
+app.get('/final-grnprn-update', authenticateToken, authController.finalGrnPrnUpdate);
+app.get('/sync-databases', authenticateToken, authController.syncDatabases);
+app.get('/find-user-connection', authenticateToken, authController.findUserConnection);
 
 app.post("/login", authController.login);
 app.post('/register', authController.register);

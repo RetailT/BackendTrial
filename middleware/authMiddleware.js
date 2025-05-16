@@ -1,16 +1,21 @@
-// middleware/authMiddleware.js
-const jwt = require("jsonwebtoken");
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
+  const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Extract token from 'Bearer <token>'
 
-  if (!token) return res.sendStatus(401); // Unauthorized
+  if (!token) {
+    return res.status(401).json({ message: 'Token is missing' });
+  }
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403); // Forbidden
-
-    req.user = user;
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid token' });
+    }
+    req.user = user; // Attach decoded user data to request
     next();
   });
 };
