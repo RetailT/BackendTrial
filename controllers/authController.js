@@ -7,23 +7,6 @@ const crypto = require('crypto');
 const nodemailer = require("nodemailer");
 const { sendPasswordResetEmail } = require("../utils/nodemailer");
 
-exports.getServerTime = async (req, res) => {
-  try {
-    const pool = await connectToDatabase();
-
-    const result = await pool
-      .request()
-      .query("SELECT GETDATE() AS serverTime");
-
-    res.status(200).json({
-      message: "Successfully connected to DB",
-      serverTime: result.recordset[0].serverTime,
-    });
-  } catch (error) {
-    console.error("Error fetching server time:", error);
-    res.status(500).json({ message: "Database error" });
-  }
-};
 
 //login
 exports.login = async (req, res) => {
@@ -316,3 +299,510 @@ exports.forgotPassword = async (req, res) => {
     if (mssql.connected) await mssql.close();
   }
 };
+
+//log out
+exports.closeConnection = async (req, res) => {
+  try {
+    if (mssql.connected) {
+      await mssql.close();
+      console.log("MSSQL connection closed");
+    }
+
+    res.status(200).json({ message: "Connection Closed successfully" });
+  } catch (err) {
+    console.error("Error during connection closing:", err);
+    res.status(500).json({ message: "Failed to close the connection" });
+  }
+};
+
+//temp sales table
+exports.updateTempSalesTable = async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(403).json({ message: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(403).json({ message: "Invalid or expired token" });
+    }
+
+    const username = decoded.username;
+    const {
+      company,
+      count,
+      type,
+      productCode,
+      productName,
+      costPrice,
+      scalePrice,
+      stock,
+      quantity,
+    } = req.body;
+
+    const insertQuery = `
+      USE [RT_WEB];
+      INSERT INTO tb_STOCKRECONCILATION_DATAENTRYTEMP 
+      (COMPANY_CODE, COUNT_STATUS, TYPE, PRODUCT_CODE, PRODUCT_NAMELONG, COSTPRICE, UNITPRICE, CUR_STOCK, PHY_STOCK, REPUSER)
+      VALUES (@company, @count, @type, @productCode, @productName, @costPrice, @scalePrice, @stock, @quantity, @username)
+    `;
+
+    const insertRequest = new mssql.Request();
+    insertRequest.input("company", mssql.NChar(10), company);
+    insertRequest.input("count", mssql.NChar(10), count);
+    insertRequest.input("type", mssql.NChar(10), type);
+    insertRequest.input("productCode", mssql.NChar(30), productCode);
+    insertRequest.input("productName", mssql.NChar(50), productName);
+    insertRequest.input("costPrice", mssql.Money, costPrice);
+    insertRequest.input("scalePrice", mssql.Money, scalePrice);
+    insertRequest.input("stock", mssql.Float, stock);
+    insertRequest.input("quantity", mssql.Float, quantity);
+    insertRequest.input("username", mssql.NChar(10), username);
+
+    await insertRequest.query(insertQuery);
+
+    res.status(201).json({ message: "Table Updated successfully" });
+  } catch (error) {
+    console.error("Error updating sales temp table:", error);
+    res.status(500).json({ message: "Failed to update table" });
+  }
+};
+
+//temp grn table
+exports.updateTempGrnTable = async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(403).json({ message: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(403).json({ message: "Invalid or expired token" });
+    }
+
+    const username = decoded.username;
+
+    const {
+      company,
+      type,
+      productCode,
+      productName,
+      costPrice,
+      scalePrice,
+      stock,
+      quantity,
+      vendor_code,
+      vendor_name,
+      invoice_no,
+    } = req.body;
+
+    let insertQuery;
+    if (type === "GRN") {
+      insertQuery = `
+        USE [RT_WEB]
+        INSERT INTO tb_GRN_TEMP 
+        (COMPANY_CODE, VENDOR_CODE, VENDOR_NAME, INVOICE_NO, TYPE, PRODUCT_CODE, PRODUCT_NAMELONG, COSTPRICE, UNITPRICE, CUR_STOCK, PHY_STOCK, REPUSER)
+        VALUES (@company, @vendor_code, @vendor_name, @invoice_no, @type, @productCode, @productName, @costPrice, @scalePrice, @stock, @quantity, @username)
+      `;
+    } else if (type === "PRN") {
+      insertQuery = `
+        USE [RT_WEB]
+        INSERT INTO tb_PRN_TEMP 
+        (COMPANY_CODE, VENDOR_CODE, VENDOR_NAME, INVOICE_NO, TYPE, PRODUCT_CODE, PRODUCT_NAMELONG, COSTPRICE, UNITPRICE, CUR_STOCK, PHY_STOCK, REPUSER)
+        VALUES (@company, @vendor_code, @vendor_name, @invoice_no, @type, @productCode, @productName, @costPrice, @scalePrice, @stock, @quantity, @username)
+      `;
+    } else {
+      return res.status(400).json({ message: "Invalid type. Must be GRN or PRN." });
+    }
+
+    const insertRequest = new mssql.Request();
+    insertRequest.input("company", mssql.NChar(10), company);
+    insertRequest.input("vendor_code", mssql.NChar(10), vendor_code);
+    insertRequest.input("vendor_name", mssql.NChar(50), vendor_name);
+    insertRequest.input("invoice_no", mssql.NChar(10), invoice_no);
+    insertRequest.input("type", mssql.NChar(10), type);
+    insertRequest.input("productCode", mssql.NChar(30), productCode);
+    insertRequest.input("productName", mssql.NChar(50), productName);
+    insertRequest.input("costPrice", mssql.Money, costPrice);
+    insertRequest.input("scalePrice", mssql.Money, scalePrice);
+    insertRequest.input("stock", mssql.Float, stock);
+    insertRequest.input("quantity", mssql.Float, quantity);
+    insertRequest.input("username", mssql.NChar(10), username);
+
+    await insertRequest.query(insertQuery);
+
+    res.status(201).json({ message: "Table Updated successfully" });
+  } catch (error) {
+    console.error("Error processing GRN table insert:", error);
+    res.status(500).json({ message: "Failed to update table" });
+  }
+};
+
+//temp tog table
+exports.updateTempTogTable = async (req, res) => {
+  console.log(req.body);
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(403).json({ message: "No authorization token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(403).json({ message: "Invalid or expired token" });
+    }
+
+    const username = decoded.username;
+
+    const {
+      company,
+      companyCodeTo,
+      type,
+      productCode,
+      productName,
+      costPrice,
+      scalePrice,
+      stock,
+      quantity
+    } = req.body;
+
+    const insertQuery = `
+      USE [RT_WEB]
+      INSERT INTO tb_TOG_TEMP 
+      (COMPANY_CODE, COMPANY_TO_CODE, TYPE, PRODUCT_CODE, PRODUCT_NAMELONG, COSTPRICE, UNITPRICE, CUR_STOCK, PHY_STOCK, REPUSER)
+      VALUES (@company, @companyCodeTo, @type, @productCode, @productName, @costPrice, @scalePrice, @stock, @quantity, @username)
+    `;
+
+    const insertRequest = new mssql.Request();
+    insertRequest.input("company", mssql.NChar(10), company);
+    insertRequest.input("companyCodeTo", mssql.NChar(10), companyCodeTo);
+    insertRequest.input("type", mssql.NChar(10), type);
+    insertRequest.input("productCode", mssql.NChar(30), productCode);
+    insertRequest.input("productName", mssql.NChar(50), productName);
+    insertRequest.input("costPrice", mssql.Money, costPrice);
+    insertRequest.input("scalePrice", mssql.Money, scalePrice);
+    insertRequest.input("stock", mssql.Float, stock);
+    insertRequest.input("quantity", mssql.Float, quantity);
+    insertRequest.input("username", mssql.NChar(10), username);
+
+    await insertRequest.query(insertQuery);
+
+    res.status(201).json({ message: "Table Updated successfully" });
+  } catch (error) {
+    console.error("Error processing TOG insert:", error);
+    res.status(500).json({ message: "Failed to update table" });
+  }
+};
+
+//stock update delete
+exports.stockUpdateDelete = async (req, res) => {
+  try {
+    const idx = parseInt(req.query.idx, 10);
+
+    if (isNaN(idx)) {
+      return res.status(400).json({ message: "Invalid or missing 'idx' parameter" });
+    }
+
+    const request = new mssql.Request();
+    request.input("idx", mssql.Int, idx);
+
+    const result = await request.query(`
+      USE [RT_WEB]
+      DELETE FROM tb_STOCKRECONCILATION_DATAENTRYTEMP WHERE IDX = @idx
+    `);
+
+    if (result.rowsAffected[0] === 0) {
+      console.log("No stock data found to delete");
+      return res.status(404).json({ message: "Stock data not found" });
+    }
+
+    res.status(200).json({ message: "Stock data deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting stock data:", error);
+    res.status(500).json({ message: "Failed to delete stock data" });
+  }
+};
+
+//grnprn delete
+exports.grnprnDelete = async (req, res) => {
+  try {
+    const { idx, type } = req.query;
+
+    if (!idx || isNaN(parseInt(idx, 10))) {
+      return res.status(400).json({ message: "Invalid or missing 'idx' parameter" });
+    }
+
+    const tableMap = {
+      GRN: "tb_GRN_TEMP",
+      PRN: "tb_PRN_TEMP",
+      TOG: "tb_TOG_TEMP",
+    };
+
+    const tableName = tableMap[type];
+
+    if (!tableName) {
+      return res.status(400).json({ message: "Invalid 'type' parameter" });
+    }
+
+    const request = new mssql.Request();
+    request.input("idx", mssql.Int, parseInt(idx, 10));
+
+    const result = await request.query(`
+      USE [RT_WEB]
+      DELETE FROM dbo.${tableName} WHERE IDX = @idx
+    `);
+
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ message: "Data not found" });
+    }
+
+    res.status(200).json({ message: "Data deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting data:", error);
+    res.status(500).json({ message: "Failed to delete data" });
+  }
+};
+
+//reset database connection
+exports.resetDatabaseConnection = async (req, res) => {
+  const {
+    name,
+    ip = "",
+    port = "",
+    username,
+    customerID = "",
+    admin = [],
+    dashboard = [],
+    stock = [],
+    removeAdmin = [],
+    removeStock = [],
+    removeDashboard = [],
+  } = req.body;
+
+  const trimmedName = name?.trim();
+  const trimmedIP = ip?.trim();
+  const trimmedPort = port?.trim();
+
+  try {
+    // Auth validation
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(403).json({ message: "No authorization token provided" });
+
+    const token = authHeader.split(" ")[1];
+    if (!token) return res.status(403).json({ message: "Token is missing" });
+
+    try {
+      jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      return res.status(403).json({ message: "Invalid or expired token" });
+    }
+
+    await mssql.close(); // close old connection
+
+    // Connect to primary database
+    const config = {
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      server: process.env.DB_SERVER,
+      database: process.env.DB_DATABASE1,
+      options: { encrypt: false, trustServerCertificate: true },
+      port: 1443,
+    };
+    await mssql.connect(config);
+
+    let dbResult;
+
+    // IP and port update
+    if (ip && port) {
+      dbResult = await mssql.query`
+        USE [RTPOS_MAIN]
+        UPDATE tb_USERS SET ip_address = ${trimmedIP}, port = ${trimmedPort}, registered_by = ${username}
+        WHERE username = ${trimmedName}
+      `;
+    } else if (ip) {
+      dbResult = await mssql.query`
+        USE [RTPOS_MAIN]
+        UPDATE tb_USERS SET ip_address = ${trimmedIP}, registered_by = ${username}
+        WHERE username = ${trimmedName}
+      `;
+    } else if (port) {
+      dbResult = await mssql.query`
+        USE [RTPOS_MAIN]
+        UPDATE tb_USERS SET port = ${trimmedPort}, registered_by = ${username}
+        WHERE username = ${trimmedName}
+      `;
+    }
+
+    // Update customer ID
+    if (customerID) {
+      const req1 = new mssql.Request();
+      req1.input("customerID", mssql.Int, customerID);
+      req1.input("newName", mssql.NVarChar, trimmedName);
+      const result = await req1.query(`
+        USE [RTPOS_MAIN];
+        UPDATE tb_USERS SET CUSTOMERID = @customerID WHERE username = @newName;
+      `);
+      if (result.rowsAffected[0] === 0) {
+        return res.status(404).json({ message: "Customer ID was not updated." });
+      }
+    }
+
+    // Utility function to update permissions
+    const updatePermissions = async (columns, value) => {
+      for (const column of columns) {
+        if (!/^[a-zA-Z0-9_]+$/.test(column)) {
+          return res.status(400).json({ message: `Invalid column name: ${column}` });
+        }
+
+        const query = `
+          USE [RTPOS_MAIN];
+          UPDATE tb_USERS SET ${column} = @value, registered_by = @registeredBy
+          WHERE username = @username;
+        `;
+
+        const req2 = new mssql.Request();
+        req2.input("value", value);
+        req2.input("registeredBy", username);
+        req2.input("username", trimmedName);
+
+        const result = await req2.query(query);
+        if (result.rowsAffected[0] === 0) {
+          return res.status(404).json({ message: `Failed to update permission for ${column}` });
+        }
+      }
+    };
+
+    // Apply T (grant) / F (revoke) permissions
+    await updatePermissions(admin, "T");
+    await updatePermissions(dashboard, "T");
+    await updatePermissions(stock, "T");
+    await updatePermissions(removeAdmin, "F");
+    await updatePermissions(removeDashboard, "F");
+    await updatePermissions(removeStock, "F");
+
+    // Check if nothing was sent
+    const nothingToUpdate =
+      !ip &&
+      !port &&
+      !customerID &&
+      admin.length === 0 &&
+      dashboard.length === 0 &&
+      stock.length === 0 &&
+      removeAdmin.length === 0 &&
+      removeDashboard.length === 0 &&
+      removeStock.length === 0;
+
+    if (nothingToUpdate) {
+      return res.status(400).json({ message: "Please provide details to update." });
+    }
+
+    return res.status(200).json({ message: "Database connection updated successfully" });
+  } catch (err) {
+    console.error("Error:", err);
+    return res.status(500).json({ message: "Failed to update the database connection." });
+  }
+};
+
+// Get dashboard data function
+exports.dashboardOptions = async (req, res) => {
+  try {
+    // Ensure database connection is open
+    if (!mssql.connected) {
+      await mssql.connect({
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        server: process.env.DB_SERVER,
+        database: process.env.DB_DATABASE2, // or RT_WEB
+        options: {
+          encrypt: false,
+          trustServerCertificate: true,
+        },
+      });
+    }
+
+    const result = await mssql.query`
+      USE [RT_WEB];
+      SELECT COMPANY_CODE, COMPANY_NAME FROM tb_COMPANY;
+    `;
+
+    const records = result.recordset || [];
+
+    if (records.length === 0) {
+      return res.status(404).json({ message: "No companies found" });
+    }
+
+    const userData = records.map(({ COMPANY_CODE, COMPANY_NAME }) => ({
+      COMPANY_CODE: COMPANY_CODE?.trim(),
+      COMPANY_NAME: COMPANY_NAME?.trim(),
+    }));
+
+    return res.status(200).json({
+      message: "Dashboard data retrieved successfully",
+      userData,
+    });
+  } catch (error) {
+    console.error("Error retrieving dashboard data:", error);
+    return res.status(500).json({ message: "Failed to retrieve dashboard data" });
+  }
+};
+
+// Get vendor data function
+exports.vendorOptions = async (req, res) => {
+  try {
+    // Ensure MSSQL connection is active
+    if (!mssql.connected) {
+      await mssql.connect({
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        server: process.env.DB_SERVER,
+        database: process.env.DB_DATABASE3 || 'POSBACK_SYSTEM',
+        options: {
+          encrypt: false,
+          trustServerCertificate: true,
+        },
+      });
+    }
+
+    const result = await mssql.query`
+      USE [POSBACK_SYSTEM];
+      SELECT VENDORCODE, VENDORNAME FROM tb_VENDOR;
+    `;
+
+    const vendors = result.recordset || [];
+
+    if (vendors.length === 0) {
+      return res.status(404).json({ message: "No vendors found" });
+    }
+
+    const vendorData = vendors.map(({ VENDORCODE, VENDORNAME }) => ({
+      VENDORCODE: VENDORCODE?.trim(),
+      VENDORNAME: VENDORNAME?.trim(),
+    }));
+
+    return res.status(200).json({
+      message: "Dashboard data retrieved successfully",
+      vendorData,
+    });
+  } catch (error) {
+    console.error("Error retrieving vendor data:", error);
+    return res.status(500).json({ message: "Failed to retrieve vendor data" });
+  }
+};
+
