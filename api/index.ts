@@ -9,7 +9,7 @@ const authController = require("../controllers/authController");
 
 app.use(
   cors({
-    origin: "https://retailtarget.lk",
+    origin: ["https://retailtarget.lk", "https://retail-web-xo4u.vercel.app"],
     credentials: true,
   })
 );
